@@ -18,6 +18,19 @@ function onWindowResize() {
 }
 window.addEventListener( 'resize', onWindowResize, false );
 
+var gui = new dat.GUI({
+	height: 64*31 - 1
+});
+
+var componentsGui = gui.addFolder('Components');
+
+var components = { mean: 1 };
+componentsGui.add(components, 'mean', 0, 1).listen();
+for(var i=0; i<64; ++i) {
+	components['component ' + i] = 0.;
+	componentsGui.add(components, 'component ' + i, -1, 1).listen();
+}
+
 var r = "tex/skybox/";
 var urls = [
 	r + "px.jpg", r + "nx.jpg",
@@ -30,14 +43,29 @@ var urls = [
 
 var carMaterial = new THREE.ShaderMaterial({
 	fragmentShader:
-"varying vec2 vUv;" +
-"uniform sampler2D meanTex;" +
+"varying vec2 vUv;\n" +
+"uniform sampler2D meanTex;\n" +
+"uniform sampler2D componentsTex;\n" +
+"uniform float weights[64];\n" +
+"uniform float muWeight;\n" +
 // "uniform samplerCube skyTex;" +
 "varying vec3 vNormal;" +
-"void main(void) {" +
-"    vec4 t = texture2D(meanTex, vUv);" +
-"    gl_FragColor = t;" +
-"}",
+"vec4 component(int idx, vec2 p) {\n" +
+"    float cx = mod(float(idx), 8.);\n" +
+"    float cy = 7.-(float(idx) - cx) / 8.;\n" +
+"    p = mod(p, 1.);\n" +
+"    p.x += cx; p.y += cy;\n" +
+"    p /= 8.;\n" +
+"    vec4 c = texture2D(componentsTex, p);\n" +
+"    c.rgb -= 0.5; c.rgb *= 2.;\n" +
+"    return c;\n" +
+"}" +
+"void main(void) {\n" +
+"    vec4 mu = texture2D(meanTex, vUv);\n" +
+"    vec4 c = muWeight * mu;\n" +
+"    for(int i=0; i<64; ++i) { c += weights[i]*component(i, vUv); }\n" +
+"    gl_FragColor = c;" +
+"}\n",
 	vertexShader:
 "varying vec2 vUv;" +
 "varying vec3 vNormal;" +
@@ -45,10 +73,13 @@ var carMaterial = new THREE.ShaderMaterial({
 "    vUv = uv;" +
 "    vNormal = (modelViewMatrix * vec4(normal, 0)).xyz;" +
 "    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0 );" +
-"}",
+"}\n",
 	side: THREE.DoubleSide,
 	uniforms: {
 		meanTex: { type: 't' },
+		componentsTex: { type: 't' },
+		weights: { type: 'fv1', value: [] },
+		muWeight: { type: 'f', value: 0 },
 //		skyTex: { type: 't', value: textureCube },
 	},
 });
@@ -64,10 +95,12 @@ loader.load('data/06-sph.json',
 
 new THREE.TextureLoader().load(
 	'tex/06_warp_sph/mean.png',
-	//'tex/06_warp_sph/component_0001.png',
-	function(tex) {
-		carMaterial.uniforms.meanTex.value = tex;
-	}
+	function(tex) { carMaterial.uniforms.meanTex.value = tex; }
+);
+
+new THREE.TextureLoader().load(
+	'tex/06_warp_sph/components.png',
+	function(tex) { carMaterial.uniforms.componentsTex.value = tex; }
 );
 
 // Skybox
@@ -96,6 +129,11 @@ function render(time) {
 	} else {
 		deltaTime = time - lastTime;
 		lastTime = time;
+	}
+
+	carMaterial.uniforms.muWeight.value = components['mean'];
+	for(var i=0; i<64; ++i) {
+		carMaterial.uniforms.weights.value[i] = components['component ' + i];
 	}
 
 	var r = 0.7, speed = 0.66;

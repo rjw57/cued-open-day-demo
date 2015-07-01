@@ -140,7 +140,6 @@ scene.add(light);
 light = new THREE.AmbientLight(0xffffff, 0.1);
 scene.add(light);
 
-
 function loadRoadTex(url) {
     var t = THREE.ImageUtils.loadTexture(url);
     t.wrapS = THREE.RepeatWrapping;
@@ -199,6 +198,17 @@ guiParams.search = function() {
             }
             previewImg.src = bestImg;
 };
+
+guiParams.slideshow = false;
+gui.add(guiParams, 'slideshow').listen();
+
+function tick() {
+    if(guiParams.slideshow) {
+        guiParams.random();
+    }
+    setTimeout(tick, 6000);
+}
+tick();
 
 var startTime = null, lastTime = null;
 function render(time) {
